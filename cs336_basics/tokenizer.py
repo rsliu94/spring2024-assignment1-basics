@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from cs336_basics.utils.io import GPT2_PRE_TOKEN_PATTERN, WHITESPACE_PATTERN
 import logging
 from tqdm import tqdm
+import time
 logging.basicConfig(level=logging.INFO)
 
 class BPE_v1:
@@ -18,23 +19,25 @@ class BPE_v1:
         
     def pre_tokenize(self, input_path: str | os.PathLike, special_tokens: list[str]):
         pat = GPT2_PRE_TOKEN_PATTERN
+        start_time = time.time()
         with open(input_path, "r") as f:
             text = f.read()
-        logging.info(f"PRE-TOKENIZE: text length: {len(text)}")
+        end_time = time.time()
+        logging.info(f"File reading took {end_time - start_time:.2f} seconds")
         # remove special tokens
         for special_token in special_tokens:
             text = text.replace(special_token, "")
-        logging.info(f"PRE-TOKENIZE: text length after removing special tokens: {len(text)}")
         all_tokens = re.findall(pat, text)
-        logging.info(f"PRE-TOKENIZE: all_tokens length: {len(all_tokens)}")
         all_token_counters = Counter(all_tokens)
-        logging.info(f"PRE-TOKENIZE: all_token_counters keys length: {len(all_token_counters.keys())}")
         pre_token_freq = {}
-        for token, freq in all_token_counters.items():
+        start_time = time.time()
+        for token, freq in tqdm(all_token_counters.items()):
             # token = 'iron'
             # tuple of bytes: (b'i', b'r', b'o', b'n')
             tuple_of_bytes = tuple([bytes([c]) for c in token.encode("utf-8")]) # diff of bytes(97)[this is a init function, =[0]*97] and bytes([97])
             pre_token_freq[tuple_of_bytes] = freq
+        end_time = time.time()
+        logging.info(f"Pre-tokenization took {end_time - start_time:.2f} seconds")
         return pre_token_freq
 
     def train(self, input_path: str | os.PathLike, special_tokens: list[str]):
@@ -45,11 +48,12 @@ class BPE_v1:
             for i in range(len(tuple_of_bytes) - 1):
                 pair_freq[(tuple_of_bytes[i], tuple_of_bytes[i + 1])] += freq
         # pair_freq # {((b'E', b'v'), 5), ((b'E', b'n'), 5), ((b'i', b'r'), 11)}
-        count = 1
+        count = 0
+        start_time = time.time()
         while len(self.vocab) < self.vocab_size:
             most_freq_pair = max(pair_freq.items(), key=lambda x: (x[1], x))[0] # sort by freq, then by lexicographical order of the pair, return (b'i', b'r')
             # update merges
-            logging.info(f"Merge number {count}: {most_freq_pair}")
+            # logging.info(f"Merge number {count}: {most_freq_pair}")
             count += 1
             self.merges.append(most_freq_pair)
             # update vocab
@@ -77,10 +81,11 @@ class BPE_v1:
                 new_pre_token_freq[tuple_of_bytes] = freq
             # update pre_token_freq
             pre_token_freq = new_pre_token_freq
+        end_time = time.time()
+        logging.info(f"Training took {end_time - start_time:.2f} seconds")
+        logging.info(f"Performed {count} merges, average time per merge: {(end_time - start_time) / count:.2f} seconds")
             
         return self.vocab, self.merges
-                        
-        
 
 if __name__ == "__main__":
     tokenizer = BPE_v1(300, ["<endoftext>"])
