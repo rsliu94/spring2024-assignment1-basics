@@ -87,6 +87,49 @@ class BPE_v1:
             
         return self.vocab, self.merges
 
+    def save(self, output_dir: str | os.PathLike):
+        """Save vocabulary and merges to disk"""
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Save vocab
+        vocab_path = os.path.join(output_dir, "vocab.txt")
+        with open(vocab_path, "w", encoding="utf-8") as f:
+            for token_id, token_bytes in sorted(self.vocab.items()):
+                # Convert bytes to hex representation for readability
+                hex_repr = token_bytes.hex()
+                f.write(f"{token_id}\t{hex_repr}\n")
+        
+        # Save merges
+        merges_path = os.path.join(output_dir, "merges.txt")
+        with open(merges_path, "w", encoding="utf-8") as f:
+            for token1, token2 in self.merges:
+                hex1, hex2 = token1.hex(), token2.hex()
+                f.write(f"{hex1} {hex2}\n")
+        logging.info(f"Saved vocabulary and merges to {output_dir}")
+                
+    def load(self, input_dir: str | os.PathLike):
+        """Load vocabulary and merges from disk"""
+        # Load vocab
+        vocab_path = os.path.join(input_dir, "vocab.txt")
+        self.vocab = {}
+        with open(vocab_path, "r", encoding="utf-8") as f:
+            for line in f:
+                token_id, hex_repr = line.strip().split("\t")
+                self.vocab[int(token_id)] = bytes.fromhex(hex_repr)
+                
+        # Load merges
+        merges_path = os.path.join(input_dir, "merges.txt")
+        self.merges = []
+        with open(merges_path, "r", encoding="utf-8") as f:
+            for line in f:
+                hex1, hex2 = line.strip().split()
+                self.merges.append((bytes.fromhex(hex1), bytes.fromhex(hex2)))
+
 if __name__ == "__main__":
     tokenizer = BPE_v1(300, ["<endoftext>"])
-    vocab, merges = tokenizer.train("/Users/runshengliu/github/CS336-stanford-llm/spring2024-assignment1-basics/tests/fixtures/corpus.en", ["<endoftext>"])
+    # path = "/Users/runshengliu/github/CS336-stanford-llm/spring2024-assignment1-basics/tests/fixtures/corpus.en"
+    # path = "/root/autodl-tmp/github/CS336-Assignments/spring2024-assignment1-basics/tests/fixtures/corpus.en"
+    path = "/root/autodl-tmp/github/CS336-Assignments/spring2024-assignment1-basics/data/TinyStoriesV2-GPT4-train.txt"
+    vocab, merges = tokenizer.train(path, ["<endoftext>"])
+    tokenizer.save("./assets/bpe_v1")
+    
