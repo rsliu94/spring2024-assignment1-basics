@@ -1,5 +1,7 @@
 # CS336 Spring 2024 Assignment 1: Basics
 
+Solutions to assignment 1.
+
 For a full description of the assignment, see the assignment handout at
 [cs336_spring2024_assignment1_basics.pdf](./cs336_spring2024_assignment1_basics.pdf)
 
