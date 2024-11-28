@@ -1,11 +1,11 @@
 import regex as re
 import os
 from collections import Counter, defaultdict
-from cs336_basics.utils.io import GPT2_PRE_TOKEN_PATTERN, WHITESPACE_PATTERN, get_tokenizer_from_vocab_merges_path
+from cs336_basics.utils.io import GPT2_PRE_TOKEN_PATTERN, WHITESPACE_PATTERN, get_tokenizer_from_vocab_merges_path, gpt2_bytes_to_unicode
 import logging
 from tqdm import tqdm
 import time
-from typing import Iterable, Iterator, Tuple, List
+from typing import Iterable, Iterator, Tuple, List, Dict
 import tiktoken
 import json
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +30,33 @@ def update(ids: List[int], pair: Tuple[int, int], new_id: int) -> List[int]:
             new_ids.append(ids[i])
             i += 1
     return new_ids
+
+def save_voacb_and_merge(vocab: Dict[int, bytes], merges: List[Tuple[bytes, bytes]],
+                            vocab_path: str, merges_path: str):
+    byte_to_unicode = gpt2_bytes_to_unicode()
+
+    # Reverse the mapping from unicode characters to bytes
+    unicode_to_byte = {v: k for k, v in byte_to_unicode.items()}
+    
+    # Convert the byte tokens in the vocab back to string tokens using the unicode mapping
+    reversed_vocab = {''.join([byte_to_unicode[b] for b in bytes_token]):k
+                      for k, bytes_token in vocab.items()}
+
+    # Convert the byte sequences in merges back to string tokens
+    reversed_merges = [' '.join([''.join([byte_to_unicode[b] for b in merge[0]]),
+                                 ''.join([byte_to_unicode[b] for b in merge[1]])])
+                       for merge in merges]
+
+    # Save the vocab dictionary as a JSON file
+    with open(vocab_path, 'w', encoding='utf-8') as f:
+        json.dump(reversed_vocab, f, ensure_ascii=False)
+        logging.info(f"Vocab saved to {vocab_path}")
+    
+    # Save the merges list to a file
+    with open(merges_path, 'w', encoding='utf-8') as f:
+        for merge in reversed_merges:
+            f.write(merge + '\n')
+        logging.info(f"Merges saved to {merges_path}")
 
 def train_bpe(input_path: str | os.PathLike, vocab_size: int, special_tokens: list[str], is_save: bool = False, output_dir: str | os.PathLike = None):
     """
@@ -121,7 +148,12 @@ def train_bpe(input_path: str | os.PathLike, vocab_size: int, special_tokens: li
     logging.info(f"Performed {count} merges, average time per merge: {(end_time - start_time) / count:.2f} seconds")
         
     if is_save and output_dir:
-        pass # TODO: save vocab and merges
+        os.makedirs(output_dir, exist_ok=True)
+        vocab_path = os.path.join(output_dir, "vocab.json")
+        merges_path = os.path.join(output_dir, "merges.txt")
+        save_voacb_and_merge(vocab, merges, vocab_path, merges_path)
+        
+    return vocab, merges
                 
 class BPE:
     def __init__(self, vocab: dict[int, bytes], merges: list[tuple[bytes, bytes]], special_tokens: list[str]):
