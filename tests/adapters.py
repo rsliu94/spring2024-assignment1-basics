@@ -7,7 +7,7 @@ from typing import IO, BinaryIO, Iterable, Optional, Type
 import numpy.typing as npt
 import torch
 
-from cs336_basics.tokenizer import BPE_v1, BPE_v2
+from cs336_basics.tokenizer import BPE, train_bpe
 
 
 def run_positionwise_feedforward(
@@ -538,8 +538,8 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    bpe_v2 = BPE_v2(vocab, merges, special_tokens)
-    return bpe_v2
+    bpe_tokenizer = BPE(vocab, merges, special_tokens)
+    return bpe_tokenizer
 
 
 def run_train_bpe(
@@ -572,6 +572,5 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    bpe_v1 = BPE_v1(vocab_size, special_tokens)
-    vocab, merges = bpe_v1.train(input_path, special_tokens)
+    vocab, merges = train_bpe(input_path, vocab_size, special_tokens)
     return vocab, merges
