@@ -21,6 +21,19 @@ class GELU(torch.nn.Module):
     def forward(self, x):
         return 0.5 * x * (1 + torch.erf(x / math.sqrt(2)))
     
+class FFN(torch.nn.Module):
+    def __init__(self, d_model: int, d_ff: int):
+        super().__init__()
+        self.w1 = torch.nn.Linear(d_model, d_ff, bias=False)
+        self.w2 = torch.nn.Linear(d_ff, d_model, bias=False)
+        self.gelu = GELU()
+    
+    def forward(self, x):
+        return self.w2(self.gelu(self.w1(x)))
+    
 if __name__ == "__main__":
     rmsnorm = RMSNorm(d_model=14, eps=1e-8)
-    print(rmsnorm.state_dict())
+    print(rmsnorm.state_dict().keys())
+    ffn = FFN(d_model=14, d_ff=14)
+    print(ffn.state_dict().keys())
+    
