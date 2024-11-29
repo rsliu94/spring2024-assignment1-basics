@@ -31,6 +31,19 @@ class FFN(torch.nn.Module):
     def forward(self, x):
         return self.w2(self.gelu(self.w1(x)))
     
+class Softmax(torch.nn.Module):
+    def __init__(self, dim: int):
+        super().__init__()
+        self.dim = dim
+    
+    def forward(self, x):
+        max_val = torch.max(x, dim=-1, keepdim=True)[0]
+        x = x - max_val
+        exp_x = torch.exp(x)
+        sum_exp_x = torch.sum(exp_x, dim=-1, keepdim=True)
+        return exp_x / sum_exp_x
+
+    
 if __name__ == "__main__":
     rmsnorm = RMSNorm(d_model=14, eps=1e-8)
     print(rmsnorm.state_dict().keys())

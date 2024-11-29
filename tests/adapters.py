@@ -8,7 +8,7 @@ import numpy.typing as npt
 import torch
 
 from cs336_basics.tokenizer import BPE, train_bpe
-from cs336_basics.lm_lego import RMSNorm, GELU, FFN
+from cs336_basics.lm_lego import RMSNorm, GELU, FFN, Softmax
 
 
 def run_positionwise_feedforward(
@@ -398,7 +398,8 @@ def run_softmax(in_features: torch.FloatTensor, dim: int) -> torch.FloatTensor:
         FloatTensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+    softmax = Softmax(dim)
+    return softmax(in_features)
 
 
 def run_cross_entropy(inputs: torch.FloatTensor, targets: torch.LongTensor):
