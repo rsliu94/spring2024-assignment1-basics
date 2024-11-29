@@ -58,7 +58,11 @@ def save_voacb_and_merge(vocab: Dict[int, bytes], merges: List[Tuple[bytes, byte
             f.write(merge + '\n')
         logging.info(f"Merges saved to {merges_path}")
 
-def train_bpe(input_path: str | os.PathLike, vocab_size: int, special_tokens: list[str], is_save: bool = False, output_dir: str | os.PathLike = None):
+def train_bpe(input_path: str | os.PathLike, 
+              vocab_size: int, 
+              special_tokens: list[str], 
+              is_save: bool = False, 
+              output_dir: str | os.PathLike = None) -> Tuple[Dict[int, bytes], List[Tuple[bytes, bytes]]]:
     """
     Train a BPE tokenizer on the input file and save the vocab and merges to the output directory if is_save is True.
     
@@ -147,12 +151,6 @@ def train_bpe(input_path: str | os.PathLike, vocab_size: int, special_tokens: li
     logging.info(f"Training took {end_time - start_time:.2f} seconds")
     logging.info(f"Performed {count} merges, average time per merge: {(end_time - start_time) / count:.2f} seconds")
         
-    if is_save and output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-        vocab_path = os.path.join(output_dir, "vocab.json")
-        merges_path = os.path.join(output_dir, "merges.txt")
-        save_voacb_and_merge(vocab, merges, vocab_path, merges_path)
-        
     return vocab, merges
                 
 class BPE:
@@ -165,9 +163,10 @@ class BPE:
                 if special_token_bytes not in self.vocab.values():
                     self.vocab[len(self.vocab)] = special_token_bytes
         self.vocab_bytes_to_id = {token_bytes: token_id for token_id, token_bytes in vocab.items()}
-        self.merges = {}
-        for i, (byte1, byte2) in enumerate(merges):
-            self.merges[(self.vocab_bytes_to_id[byte1], self.vocab_bytes_to_id[byte2])] = [i, self.vocab_bytes_to_id[byte1 + byte2]]
+        self.merges_int = {}
+        for byte1, byte2 in merges:
+            self.merges_int[(self.vocab_bytes_to_id[byte1], self.vocab_bytes_to_id[byte2])] = self.vocab_bytes_to_id[byte1 + byte2]
+        self.merges = merges
     
     @classmethod
     def from_files(cls, vocab_path: str | os.PathLike, merges_path: str | os.PathLike, special_tokens: list[str]):
@@ -185,10 +184,10 @@ class BPE:
                 ids = [self.vocab_bytes_to_id[bytes([b])] for b in text_bytes]
                 while len(ids)>=2:
                     pairs = get_pairs(ids)
-                    high_priority_pair = min(pairs, key=lambda pair: self.merges.get(pair, [float('inf'), float('inf')])[0])
-                    if high_priority_pair not in self.merges:
+                    high_priority_pair = min(pairs, key=lambda pair: self.merges_int.get(pair, float('inf')))
+                    if high_priority_pair not in self.merges_int:
                         break
-                    new_id = self.merges[high_priority_pair][1]
+                    new_id = self.merges_int[high_priority_pair]
                     ids = update(ids, high_priority_pair, new_id)
                 result.extend(ids)
             return result
@@ -231,15 +230,29 @@ class BPE:
         # vocab: {1: b'l', 2: b'o', 3: b'w', 4: b'e', 5: b's', 6: b't'}
         # text: "lowes"
         return b''.join([self.vocab[t] for t in tokens]).decode('utf-8', errors='replace')
+    
+    def save(self, vocab_path: str | os.PathLike, merges_path: str | os.PathLike):
+        save_voacb_and_merge(self.vocab, self.merges, vocab_path, merges_path)
                 
 
 if __name__ == "__main__":
     
     # Test BPE_v1
-    # path = "/Users/runshengliu/github/CS336-stanford-llm/spring2024-assignment1-basics/tests/fixtures/corpus.en"
-    path = "/root/autodl-tmp/github/CS336-Assignments/spring2024-assignment1-basics/tests/fixtures/corpus.en"
+    path = "/Users/runshengliu/github/CS336-stanford-llm/spring2024-assignment1-basics/tests/fixtures/corpus.en"
+    # path = "/root/autodl-tmp/github/CS336-Assignments/spring2024-assignment1-basics/tests/fixtures/corpus.en"
     # path = "/root/autodl-tmp/github/CS336-Assignments/spring2024-assignment1-basics/data/TinyStoriesV2-GPT4-train.txt"
     vocab, merges = train_bpe(path, 300, ["<endoftext>"], is_save=True, output_dir="./assets/test_my_bpe")
+    tokenizer = BPE(vocab, merges, ["<endoftext>"])
+    
+    tokenizer.save(vocab_path="./assets/test_my_bpe/vocab.json", merges_path="./assets/test_my_bpe/merges.txt")
+    tokenizer2 = BPE.from_files(vocab_path="./assets/test_my_bpe/vocab.json", merges_path="./assets/test_my_bpe/merges.txt", special_tokens=["<endoftext>"])
+    assert vocab == tokenizer2.vocab
+    assert merges == tokenizer2.merges
+    
+    tokenizer_gpt2 = BPE.from_files(vocab_path="/Users/runshengliu/github/CS336-stanford-llm/spring2024-assignment1-basics/tests/fixtures/gpt2_vocab.json", 
+                                    merges_path="/Users/runshengliu/github/CS336-stanford-llm/spring2024-assignment1-basics/tests/fixtures/gpt2_merges.txt", 
+                                    special_tokens=["<|endoftext|>"])
+    tokenizer_gpt2.save(vocab_path="./assets/test_my_bpe/vocab.json", merges_path="./assets/test_my_bpe/merges.txt")
     
     # Test BPE_v2
     # tokenizer = BPE_v2.from_files(vocab_path="./assets/bpe_v1/vocab.txt", merges_path="./assets/bpe_v1/merges.txt", special_tokens=["<endoftext>"])

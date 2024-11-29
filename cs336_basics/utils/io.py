@@ -1,7 +1,7 @@
 from functools import lru_cache
 import json
 import os
-
+from typing import Dict, List, Tuple
 GPT2_PRE_TOKEN_PATTERN = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 WHITESPACE_PATTERN = r"\S+"
 
