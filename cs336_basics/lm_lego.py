@@ -139,7 +139,7 @@ class MultiHeadSelfAttention(torch.nn.Module):
         q = self.q_proj(x)
         k = self.k_proj(x)
         v = self.v_proj(x)
-        mask = torch.triu(torch.ones([T, T]), diagonal=1).bool()
+        mask = torch.triu(torch.ones([T, T]), diagonal=1).bool().to(x.device)
         q = q.view(B, T, self.num_heads, self.d_k).transpose(1, 2)
         k = k.view(B, T, self.num_heads, self.d_k).transpose(1, 2) # after transpose, 内存不连续
         v = v.view(B, T, self.num_heads, self.d_k).transpose(1, 2)
@@ -223,6 +223,108 @@ class TransformerBlock(torch.nn.Module):
         x = x + self.dropout2(self.ffn(self.ln2(x)))
         return x
     
+class TransformerLM(torch.nn.Module):
+    """Given the weights of a Transformer language model and input indices,
+    return the output of running a forward pass on the input indices.
+
+    Args:
+        vocab_size: int
+            The number of unique items in the output vocabulary to be predicted.
+        context_length: int,
+            The maximum number of tokens to process at once.
+        d_model: int
+            The dimensionality of the model embeddings and sublayer outputs.
+        num_layers: int
+            The number of Transformer layers to use.
+        num_heads: int
+            Number of heads to use in multi-headed attention. `d_model` must be
+            evenly divisible by `num_heads`.
+        d_ff: int
+            Dimensionality of the feed-forward inner layer (section 3.3).
+        attn_pdrop: float
+            Drop-out the attention probabilities (the softmax-normalized
+            attention scores) with this rate.
+        residual_pdrop: float
+            Apply dropout to the sum of the token and position embeddings
+            as well as the output of each sub-layer, before it is added to the
+            sub-layer input and normalized (section 5.4).
+        weights: dict[str, torch.FloatTensor]
+            State dict of our reference implementation. {num_layers} refers to an
+            integer between `0` and `num_layers - 1` (the layer index).
+            The keys of this dictionary are:
+            - `token_embeddings.weight`
+                Token embedding matrix. Shape is (vocab_size, d_model).
+            - `position_embeddings.weight`
+                Positional embedding matrix. Shape is (context_length, d_model).
+            - `layers.{num_layers}.attn.q_proj.weight`
+                The query projections for all `num_heads` attention heads.
+                Shape is (num_heads * (d_model / num_heads), d_model).
+                The rows are ordered by matrices of shape (num_heads, d_k),
+                so `attn.q_proj.weight == torch.cat([q_heads.0.weight, ..., q_heads.N.weight], dim=0)`.
+            - `layers.{num_layers}.attn.k_proj.weight`
+                The key projections for all `num_heads` attention heads.
+                Shape is (num_heads * (d_model / num_heads), d_model).
+                The rows are ordered by matrices of shape (num_heads, d_k),
+                so `attn.k_proj.weight == torch.cat([k_heads.0.weight, ..., k_heads.N.weight], dim=0)`.
+            - `layers.{num_layers}.attn.v_proj.weight`
+                The value projections for all `num_heads` attention heads.
+                Shape is (num_heads * (d_model / num_heads), d_model).
+                The rows are ordered by matrices of shape (num_heads, d_v),
+                so `attn.v_proj.weight == torch.cat([v_heads.0.weight, ..., v_heads.N.weight], dim=0)`.
+            - `layers.{num_layers}.attn.output_proj.weight`
+                Weight of the multi-head self-attention output projection
+                Shape is ((d_model / num_heads) * num_heads, d_model).
+            - `layers.{num_layers}.ln1.weight`
+                Weights of affine transform for the first RMSNorm
+                applied in the transformer block.
+                Shape is (d_model,).
+            - `layers.{num_layers}.ffn.w1.weight`
+                Weight of the first linear transformation in the FFN.
+                Shape is (d_ff, d_model).
+            - `layers.{num_layers}.ffn.w2.weight`
+                Weight of the second linear transformation in the FFN.
+                Shape is (d_model, d_ff).
+            - `layers.{num_layers}.ln2.weight`
+                Weights of affine transform for the second RMSNorm
+                applied in the transformer block.
+                Shape is (d_model,).
+            - `ln_final.weight`
+                Weights of affine transform for RMSNorm applied to the output of the final transformer block.
+                Shape is (d_model, ).
+            - `lm_head.weight`
+                Weights of the language model output embedding.
+                Shape is (vocab_size, d_model).
+        in_indices: torch.LongTensor
+            Tensor with input indices to run the language model on. Shape is (batch_size, sequence_length), where
+            `sequence_length` is at most `context_length`.
+
+    Returns:
+        FloatTensor of shape (batch size, sequence_length, vocab_size) with the predicted unnormalized
+        next-word distribution for each token.
+    """
+    def __init__(self, vocab_size: int, context_length: int, d_model: int, num_layers: int, num_heads: int, d_ff: int, attn_pdrop: float, residual_pdrop: float):
+        super().__init__()
+        self.token_embeddings = torch.nn.Embedding(vocab_size, d_model)
+        self.position_embeddings = torch.nn.Embedding(context_length, d_model)
+        self.layers = torch.nn.ModuleList([TransformerBlock(d_model=d_model, num_heads=num_heads, d_ff=d_ff, attn_pdrop=attn_pdrop, residual_pdrop=residual_pdrop) for _ in range(num_layers)])
+        self.ln_final = RMSNorm(d_model=d_model, eps=1e-5)
+        self.lm_head = torch.nn.Linear(d_model, vocab_size, bias=False)
+        self.dropout = torch.nn.Dropout(p=residual_pdrop)
+        
+    def forward(self, in_indices):
+        B, T = in_indices.size()
+        emb = self.token_embeddings(in_indices)
+        # position tensor
+        position_ids = torch.arange(T, dtype=torch.long, device=in_indices.device).unsqueeze(0).expand_as(in_indices)
+        position_emb = self.position_embeddings(position_ids)
+        emb += position_emb
+        x = self.dropout(emb)
+        for layer in self.layers:
+            x = layer(x)
+        x = self.ln_final(x)
+        return self.lm_head(x)
+        
+        
 if __name__ == "__main__":
     rmsnorm = RMSNorm(d_model=14, eps=1e-8)
     print(rmsnorm.state_dict().keys())

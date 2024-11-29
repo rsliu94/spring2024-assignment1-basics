@@ -8,7 +8,7 @@ import numpy.typing as npt
 import torch
 
 from cs336_basics.tokenizer import BPE, train_bpe
-from cs336_basics.lm_lego import RMSNorm, GELU, FFN, Softmax, ScaleDotProductAttention, MultiHeadSelfAttention, TransformerBlock
+from cs336_basics.lm_lego import RMSNorm, GELU, FFN, Softmax, ScaleDotProductAttention, MultiHeadSelfAttention, TransformerBlock, TransformerLM
 
 
 def run_positionwise_feedforward(
@@ -309,7 +309,9 @@ def run_transformer_lm(
         FloatTensor of shape (batch size, sequence_length, vocab_size) with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    tlm = TransformerLM(vocab_size=vocab_size, context_length=context_length, d_model=d_model, num_layers=num_layers, num_heads=num_heads, d_ff=d_ff, attn_pdrop=attn_pdrop, residual_pdrop=residual_pdrop)
+    tlm.load_state_dict(weights)
+    return tlm(in_indices)
 
 
 def run_rmsnorm(
