@@ -8,7 +8,7 @@ import numpy.typing as npt
 import torch
 
 from cs336_basics.tokenizer import BPE, train_bpe
-from cs336_basics.lm_lego import RMSNorm, GELU, FFN, Softmax, ScaleDotProductAttention, MultiHeadSelfAttention
+from cs336_basics.lm_lego import RMSNorm, GELU, FFN, Softmax, ScaleDotProductAttention, MultiHeadSelfAttention, TransformerBlock
 
 
 def run_positionwise_feedforward(
@@ -214,7 +214,9 @@ def run_transformer_block(
         FloatTensor of shape (batch_size, sequence_length, d_model) with the output of
         running the Transformer block on the input features.
     """
-    raise NotImplementedError
+    tb = TransformerBlock(d_model=d_model, num_heads=num_heads, d_ff=d_ff, attn_pdrop=attn_pdrop, residual_pdrop=residual_pdrop)
+    # tb.load_state_dict(weights)
+    return tb(in_features)
 
 
 def run_transformer_lm(
