@@ -1,4 +1,5 @@
 import torch
+import math
 
 class RMSNorm(torch.nn.Module):
     def __init__(self, d_model: int, eps: float = 1e-8, state_dict: dict = None):
@@ -12,6 +13,13 @@ class RMSNorm(torch.nn.Module):
         assert x.shape[-1] == self.d_model
         denominator = torch.sqrt(torch.sum(torch.pow(x, 2), dim=-1, keepdim=True) / self.d_model + self.eps)
         return self.weight * x / denominator
+    
+class GELU(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, x):
+        return 0.5 * x * (1 + torch.erf(x / math.sqrt(2)))
     
 if __name__ == "__main__":
     rmsnorm = RMSNorm(d_model=14, eps=1e-8)
