@@ -37,11 +37,51 @@ class Softmax(torch.nn.Module):
         self.dim = dim
     
     def forward(self, x):
-        max_val = torch.max(x, dim=-1, keepdim=True)[0]
+        max_val = torch.max(x, dim=self.dim, keepdim=True)[0]
         x = x - max_val
         exp_x = torch.exp(x)
-        sum_exp_x = torch.sum(exp_x, dim=-1, keepdim=True)
+        sum_exp_x = torch.sum(exp_x, dim=self.dim, keepdim=True)
         return exp_x / sum_exp_x
+    
+class ScaleDotProductAttention(torch.nn.Module):
+    """
+        K: torch.FloatTensor
+            Tensor with attention keys. Shape is
+            (batch_size, ..., seq_len, key_dimension), where
+            "..." is optional and represents any number of other
+            batch dimensions (e.g., num_heads).
+        Q: torch.FloatTensor
+            Tensor with attention queries. Shape is
+            (batch_size, ..., seq_len, key_dimension), where
+            "..." is optional and represents any number of other
+            batch dimensions (e.g., num_heads).
+        V: torch.FloatTensor
+            Tensor with attention values. Shape is
+            (batch_size, ..., seq_len, value_dimension), where
+            "..." is optional and represents any number of other
+            batch dimensions (e.g., num_heads).
+        mask: Optional[torch.BoolTensor]
+            An (optional) mask of shape (seq_len, seq_len).
+            Attention scores for positions with a mask value of `True` should
+            be masked out, i.e., not affect the softmaxed attention probabilities.
+        pdrop: Optional[float], default is None.
+            If given, drop-out the attention probabilities (the softmax-normalized
+            attention scores) with this rate.
+    """
+    def __init__(self, pdrop: float = None):
+        super().__init__()
+        self.pdrop = pdrop
+    
+    def forward(self, Q, K, V, mask=None):
+        d_k = Q.shape[-1]
+        scores = Q @ K.transpose(-2, -1) / math.sqrt(d_k)
+        if mask is not None:
+            scores = scores.masked_fill(mask, -torch.inf)
+        softmax = Softmax(dim=-1)
+        attention_probs = softmax(scores)
+        if self.pdrop is not None:
+            attention_probs = torch.nn.functional.dropout(attention_probs, p=self.pdrop)
+        return attention_probs @ V
 
     
 if __name__ == "__main__":

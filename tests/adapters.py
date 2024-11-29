@@ -8,7 +8,7 @@ import numpy.typing as npt
 import torch
 
 from cs336_basics.tokenizer import BPE, train_bpe
-from cs336_basics.lm_lego import RMSNorm, GELU, FFN, Softmax
+from cs336_basics.lm_lego import RMSNorm, GELU, FFN, Softmax, ScaleDotProductAttention
 
 
 def run_positionwise_feedforward(
@@ -90,8 +90,8 @@ def run_scaled_dot_product_attention(
         with the output of running your scaled dot product attention
         implementation with the provided key, query, and value tensors.
     """
-    raise NotImplementedError
-
+    attention = ScaleDotProductAttention(pdrop=pdrop)
+    return attention(Q, K, V, mask=mask)
 
 def run_multihead_self_attention(
     d_model: int,
