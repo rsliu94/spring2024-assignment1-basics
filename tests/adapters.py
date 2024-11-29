@@ -8,7 +8,7 @@ import numpy.typing as npt
 import torch
 
 from cs336_basics.tokenizer import BPE, train_bpe
-from cs336_basics.lm_lego import RMSNorm, GELU, FFN, Softmax, ScaleDotProductAttention
+from cs336_basics.lm_lego import RMSNorm, GELU, FFN, Softmax, ScaleDotProductAttention, MultiHeadSelfAttention
 
 
 def run_positionwise_feedforward(
@@ -140,7 +140,9 @@ def run_multihead_self_attention(
         torch.FloatTensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    mhsa = MultiHeadSelfAttention(d_model=d_model, num_heads=num_heads, attn_pdrop=attn_pdrop)
+    mhsa.load_state_dict(state_dict=weights)
+    return mhsa(in_features)
 
 
 def run_transformer_block(

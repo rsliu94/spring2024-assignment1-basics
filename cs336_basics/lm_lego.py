@@ -83,7 +83,79 @@ class ScaleDotProductAttention(torch.nn.Module):
             attention_probs = torch.nn.functional.dropout(attention_probs, p=self.pdrop)
         return attention_probs @ V
 
+
+class MultiHeadSelfAttention(torch.nn.Module):
+    """ 
+    Given the key, query, and value projection weights of a naive unbatched
+    implementation of multi-head attention, return the output of an optimized batched
+    implementation. This implementation should handle the key, query, and value projections
+    for all heads in a single matrix multiply.
+    See section 3.2.2 of Vaswani et al., 2017.
+
+    Args:
+        d_model: int
+            Dimensionality of the feedforward input and output.
+        num_heads: int
+            Number of heads to use in multi-headed attention.
+        attn_pdrop: float
+            Drop-out the attention probabilities (the softmax-normalized
+            attention scores) with this rate.
+        weights: dict[str, torch.FloatTensor]
+            State dict of our reference implementation.
+            The keys of this dictionary are:
+            - `q_heads.{N}.weight`, `q_heads.{N}.weight`:
+                Weights for the query projection heads.
+                N is an integer from 0 to `num_heads - 1`.
+                Shape of each tensor is (d_key, d_model).
+            - `k_heads.{N}.weight`, `k_heads.{N}.weight`:
+                Weights for the key projection heads.
+                N is an integer from 0 to `num_heads - 1`.
+                Shape of each tensor is (d_key, d_model).
+            - `v_heads.{N}.weight`, `v_heads.{N}.weight`:
+                Weights for the value projection heads.
+                N is an integer from 0 to `num_heads - 1`.
+                Shape of each tensor is (d_value, d_model).
+            - `output_proj.weight`:
+                Weight of the output projection
+                (W^{O} in the original Transformer paper)
+                Shape of (d_model, d_value * num_heads).
+        in_features: torch.FloatTensor
+            Tensor to run your implementation on.
+    """
+    def __init__(self, d_model: int, num_heads: int, attn_pdrop: float):
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.attn_pdrop = attn_pdrop
+        self.d_k = d_model // num_heads
+        self.q_proj = torch.nn.Linear(d_model, d_model, bias=False)
+        self.k_proj = torch.nn.Linear(d_model, d_model, bias=False)
+        self.v_proj = torch.nn.Linear(d_model, d_model, bias=False)
+        self.output_proj = torch.nn.Linear(d_model, d_model, bias=False)
+        self.attn = ScaleDotProductAttention(pdrop=attn_pdrop)
+
+    def forward(self, x):
+        B, T, _ = x.size()
+        q = self.q_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
+        mask = torch.triu(torch.ones([T, T]), diagonal=1).bool()
+        q = q.view(B, T, self.num_heads, self.d_k).transpose(1, 2)
+        k = k.view(B, T, self.num_heads, self.d_k).transpose(1, 2) # after transpose, 内存不连续
+        v = v.view(B, T, self.num_heads, self.d_k).transpose(1, 2)
+        attn_output = self.attn(q, k, v, mask=mask) # attn_output: (B, num_heads, T, d_k)
+        attn_output = attn_output.transpose(1, 2).contiguous().view(B, T, self.d_model)
+        return self.output_proj(attn_output)
     
+    def load_state_dict(self, state_dict: dict):
+        for i in range(self.num_heads):
+            self.q_proj.weight.data[i*self.d_k:(i+1)*self.d_k, :] = state_dict[f"q_heads.{i}.weight"]
+            self.k_proj.weight.data[i*self.d_k:(i+1)*self.d_k, :] = state_dict[f"k_heads.{i}.weight"]
+            self.v_proj.weight.data[i*self.d_k:(i+1)*self.d_k, :] = state_dict[f"v_heads.{i}.weight"]
+        self.output_proj.weight.data = state_dict["output_proj.weight"]
+        
+        
+
 if __name__ == "__main__":
     rmsnorm = RMSNorm(d_model=14, eps=1e-8)
     print(rmsnorm.state_dict().keys())
